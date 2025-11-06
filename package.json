@@ -1,0 +1,12 @@
+{
+  "name": "mecca-portal-wrapper",
+  "version": "1.0.0",
+  "description": "Azure Static Web App wrapper for MECCA Platinum FM Portal",
+  "scripts": {
+    "start": "http-server ./src -p 8080",
+    "build": "echo 'No build step required for static content'"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

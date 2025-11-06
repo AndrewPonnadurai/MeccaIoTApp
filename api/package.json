@@ -1,0 +1,11 @@
+{
+  "name": "mecca-portal-api",
+  "version": "1.0.0",
+  "description": "Azure Functions for MECCA Portal authentication and proxy",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
