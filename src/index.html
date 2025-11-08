@@ -140,7 +140,6 @@
     <script>
         const CONFIG = {
             apiProxyUrl: '/api/auth-proxy',
-            meccaApiUrl: 'https://api-mecca.platinumfm.com.au/api/Users/Login',
             portalUrl: 'https://report-mecca.platinumfm.com.au/work-orders-open',
             tokenKey: 'mecca_auth_token',
             tokenExpiry: 'mecca_token_expiry'
@@ -168,44 +167,21 @@
                 return false;
             }
 
-            async getCredentials() {
-                // Get credentials from Azure Function (doesn't expose them to browser)
-                const response = await fetch(`${CONFIG.apiProxyUrl}?action=getcredentials`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to get credentials');
-                }
-
-                return await response.json();
-            }
-
-            async loginDirect() {
-                console.log('→ Getting credentials...');
+            async login() {
+                console.log('→ Authenticating with cookie domain rewriting...');
                 
-                // Get credentials from secure backend
-                const creds = await this.getCredentials();
-                
-                console.log('→ Authenticating directly with MECCA API...');
-                
-                // Make the login call from the BROWSER so cookies get set
-                const response = await fetch(CONFIG.meccaApiUrl, {
+                // Call Azure Function which will set cookies for parent domain
+                const response = await fetch(`${CONFIG.apiProxyUrl}?action=login`, {
                     method: 'POST',
                     headers: { 
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
+                        'Content-Type': 'application/json'
                     },
-                    credentials: 'include', // Important: include cookies
-                    body: JSON.stringify({
-                        username: creds.username,
-                        password: creds.password
-                    })
+                    credentials: 'include' // CRITICAL: Allows cookies to be set and sent
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Authentication failed: ${response.status}`);
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `Authentication failed: ${response.status}`);
                 }
 
                 const data = await response.json();
@@ -215,8 +191,9 @@
                     localStorage.setItem(CONFIG.tokenKey, data.token);
                     localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
                     
-                    console.log('✓ Token obtained and cookies set');
-                    console.log('✓ Expires:', new Date(data.expiredOn).toLocaleString());
+                    console.log('✓ Token obtained');
+                    console.log('✓ Cookies set for parent domain:', data.cookiesSet || 0);
+                    console.log('✓ Token expires:', new Date(data.expiredOn).toLocaleString());
                     
                     return true;
                 }
@@ -233,20 +210,26 @@
 
         async function initialize() {
             try {
-                console.log('=== Initializing ===');
+                console.log('=== MECCA Portal Initialization ===');
+                console.log('Current domain:', window.location.hostname);
                 
-                // Authenticate - this sets cookies in the browser
+                // Authenticate - Azure Function will set cookies for .platinumfm.com.au
                 if (!authManager.hasValidToken()) {
-                    await authManager.loginDirect();
+                    await authManager.login();
                 } else {
                     console.log('✓ Valid token exists');
                 }
 
-                // Now load portal - it should have the cookies
+                // Give cookies a moment to propagate
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Load portal - should now have access to cookies
+                console.log('→ Loading portal with shared cookies...');
                 loadPortal();
                 
             } catch (error) {
-                console.error('Error:', error);
+                console.error('=== Initialization Error ===');
+                console.error(error);
                 showError(error.message);
             }
         }
@@ -264,7 +247,12 @@
                 }, 500);
             };
             
-            // Load portal - cookies should be available now
+            iframe.onerror = function() {
+                console.error('✗ Portal failed to load');
+                showError('Portal failed to load');
+            };
+            
+            // Load portal
             iframe.src = CONFIG.portalUrl;
         }
 
@@ -276,18 +264,34 @@
                 'Check Azure Portal → Configuration → Application Settings';
         }
 
-        // Auto-refresh every 6 hours
+        // Auto-refresh token every 6 hours
         setInterval(async () => {
             if (!authManager.hasValidToken()) {
+                console.log('→ Background token refresh...');
                 try {
-                    await authManager.loginDirect();
+                    await authManager.login();
+                    console.log('✓ Token refreshed, reloading portal...');
                     document.getElementById('portal-frame').src = CONFIG.portalUrl;
                 } catch (error) {
-                    console.error('Refresh failed:', error);
+                    console.error('✗ Token refresh failed:', error);
                 }
             }
         }, 6 * 60 * 60 * 1000);
 
+        // Re-authenticate when page becomes visible
+        document.addEventListener('visibilitychange', async () => {
+            if (!document.hidden && !authManager.hasValidToken()) {
+                console.log('→ Page visible, refreshing token...');
+                try {
+                    await authManager.login();
+                    document.getElementById('portal-frame').src = CONFIG.portalUrl;
+                } catch (error) {
+                    console.error('✗ Token refresh failed:', error);
+                }
+            }
+        });
+
+        // Start initialization
         initialize();
     </script>
 </body>
