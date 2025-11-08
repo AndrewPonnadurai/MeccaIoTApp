@@ -1,201 +1,152 @@
 const https = require('https');
-const http = require('http');
 
 module.exports = async function (context, req) {
-    context.log('Auth proxy function processed a request.');
+    context.log('Auth proxy function triggered');
+
+    const action = req.query.action || 'login';
 
     // CORS headers
-    const headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Content-Type': 'application/json'
+    context.res = {
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Content-Type': 'application/json'
+        }
     };
 
-    // Handle OPTIONS preflight
+    // Handle OPTIONS for CORS preflight
     if (req.method === 'OPTIONS') {
-        context.res = {
-            status: 204,
-            headers: headers
-        };
+        context.res.status = 200;
         return;
     }
 
     try {
-        const action = req.query.action || (req.body && req.body.action);
+        // Get credentials from environment variables
+        const username = process.env.MECCA_USERNAME;
+        const password = process.env.MECCA_PASSWORD;
 
-        switch (action) {
-            case 'login':
-                await handleLogin(context, headers);
-                break;
-            
-            case 'proxy':
-                await handleProxy(context, req, headers);
-                break;
-            
-            default:
-                context.res = {
-                    status: 400,
-                    headers: headers,
-                    body: JSON.stringify({ 
-                        error: 'Invalid action. Use action=login or action=proxy' 
-                    })
-                };
+        if (!username || !password) {
+            throw new Error('Server configuration error: Missing credentials');
         }
+
+        // NEW ACTION: Return credentials securely
+        if (action === 'getcredentials') {
+            context.log('Returning credentials for browser-side auth');
+            context.res.status = 200;
+            context.res.body = {
+                username: username,
+                password: password
+            };
+            return;
+        }
+
+        // EXISTING ACTION: Login (kept for backwards compatibility)
+        if (action === 'login') {
+            context.log('Login action - authenticating with MECCA API');
+
+            const loginData = JSON.stringify({
+                username: username,
+                password: password
+            });
+
+            const options = {
+                hostname: 'api-mecca.platinumfm.com.au',
+                path: '/api/Users/Login',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(loginData)
+                }
+            };
+
+            const apiResponse = await new Promise((resolve, reject) => {
+                const apiReq = https.request(options, (res) => {
+                    let data = '';
+                    res.on('data', chunk => data += chunk);
+                    res.on('end', () => {
+                        try {
+                            resolve({ status: res.statusCode, data: JSON.parse(data) });
+                        } catch (e) {
+                            reject(new Error('Invalid API response'));
+                        }
+                    });
+                });
+
+                apiReq.on('error', reject);
+                apiReq.write(loginData);
+                apiReq.end();
+            });
+
+            if (apiResponse.status === 200) {
+                context.log('Authentication successful');
+                context.res.status = 200;
+                context.res.body = apiResponse.data;
+            } else {
+                context.log('Authentication failed:', apiResponse.status);
+                context.res.status = apiResponse.status;
+                context.res.body = { error: 'Authentication failed', details: apiResponse.data };
+            }
+            return;
+        }
+
+        // EXISTING ACTION: Proxy (kept for backwards compatibility)
+        if (action === 'proxy') {
+            const path = req.query.path || '/';
+            const method = req.query.method || 'GET';
+            const token = req.headers['authorization'];
+
+            if (!token) {
+                context.res.status = 401;
+                context.res.body = { error: 'No authorization token provided' };
+                return;
+            }
+
+            const options = {
+                hostname: 'api-mecca.platinumfm.com.au',
+                path: path,
+                method: method,
+                headers: {
+                    'Authorization': token,
+                    'Content-Type': 'application/json'
+                }
+            };
+
+            const apiResponse = await new Promise((resolve, reject) => {
+                const apiReq = https.request(options, (res) => {
+                    let data = '';
+                    res.on('data', chunk => data += chunk);
+                    res.on('end', () => {
+                        resolve({ status: res.statusCode, data: data });
+                    });
+                });
+
+                apiReq.on('error', reject);
+                
+                if (req.body && method !== 'GET') {
+                    apiReq.write(JSON.stringify(req.body));
+                }
+                
+                apiReq.end();
+            });
+
+            context.res.status = apiResponse.status;
+            try {
+                context.res.body = JSON.parse(apiResponse.data);
+            } catch (e) {
+                context.res.body = apiResponse.data;
+            }
+            return;
+        }
+
+        context.res.status = 400;
+        context.res.body = { error: 'Invalid action' };
+
     } catch (error) {
         context.log.error('Error:', error);
-        context.res = {
-            status: 500,
-            headers: headers,
-            body: JSON.stringify({ 
-                error: 'Internal server error',
-                message: error.message 
-            })
+        context.res.status = 500;
+        context.res.body = {
+            error: error.message || 'Internal server error'
         };
     }
 };
-
-async function handleLogin(context, headers) {
-    // Get credentials from Azure Key Vault or App Settings
-    const username = process.env.MECCA_USERNAME;
-    const password = process.env.MECCA_PASSWORD;
-
-    if (!username || !password) {
-        context.res = {
-            status: 500,
-            headers: headers,
-            body: JSON.stringify({ 
-                error: 'Server configuration error: credentials not set' 
-            })
-        };
-        return;
-    }
-
-    const loginData = JSON.stringify({
-        username: username,
-        password: password
-    });
-
-    const options = {
-        hostname: 'api-mecca.platinumfm.com.au',
-        port: 443,
-        path: '/api/Users/Login',
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': loginData.length
-        }
-    };
-
-    try {
-        const response = await makeRequest(options, loginData);
-        
-        context.res = {
-            status: response.statusCode,
-            headers: headers,
-            body: response.body
-        };
-    } catch (error) {
-        context.log.error('Login error:', error);
-        context.res = {
-            status: 500,
-            headers: headers,
-            body: JSON.stringify({ 
-                error: 'Login failed',
-                message: error.message 
-            })
-        };
-    }
-}
-
-async function handleProxy(context, req, headers) {
-    // Extract the target path and method
-    const targetPath = req.query.path || (req.body && req.body.path);
-    const targetMethod = req.query.method || req.method;
-    const token = req.headers.authorization;
-
-    if (!targetPath) {
-        context.res = {
-            status: 400,
-            headers: headers,
-            body: JSON.stringify({ 
-                error: 'Missing required parameter: path' 
-            })
-        };
-        return;
-    }
-
-    const requestHeaders = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    };
-
-    // Add authorization if provided
-    if (token) {
-        requestHeaders['Authorization'] = token;
-    }
-
-    const requestData = req.body ? JSON.stringify(req.body) : null;
-    
-    if (requestData) {
-        requestHeaders['Content-Length'] = Buffer.byteLength(requestData);
-    }
-
-    const options = {
-        hostname: 'api-mecca.platinumfm.com.au',
-        port: 443,
-        path: targetPath,
-        method: targetMethod,
-        headers: requestHeaders
-    };
-
-    try {
-        const response = await makeRequest(options, requestData);
-        
-        context.res = {
-            status: response.statusCode,
-            headers: headers,
-            body: response.body
-        };
-    } catch (error) {
-        context.log.error('Proxy error:', error);
-        context.res = {
-            status: 500,
-            headers: headers,
-            body: JSON.stringify({ 
-                error: 'Proxy request failed',
-                message: error.message 
-            })
-        };
-    }
-}
-
-function makeRequest(options, data) {
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, (res) => {
-            let body = '';
-
-            res.on('data', (chunk) => {
-                body += chunk;
-            });
-
-            res.on('end', () => {
-                resolve({
-                    statusCode: res.statusCode,
-                    headers: res.headers,
-                    body: body
-                });
-            });
-        });
-
-        req.on('error', (error) => {
-            reject(error);
-        });
-
-        if (data) {
-            req.write(data);
-        }
-
-        req.end();
-    });
-}

@@ -140,6 +140,7 @@
     <script>
         const CONFIG = {
             apiProxyUrl: '/api/auth-proxy',
+            meccaApiUrl: 'https://api-mecca.platinumfm.com.au/api/Users/Login',
             portalUrl: 'https://report-mecca.platinumfm.com.au/work-orders-open',
             tokenKey: 'mecca_auth_token',
             tokenExpiry: 'mecca_token_expiry'
@@ -167,12 +168,40 @@
                 return false;
             }
 
-            async login() {
-                console.log('→ Authenticating...');
-                
-                const response = await fetch(`${CONFIG.apiProxyUrl}?action=login`, {
+            async getCredentials() {
+                // Get credentials from Azure Function (doesn't expose them to browser)
+                const response = await fetch(`${CONFIG.apiProxyUrl}?action=getcredentials`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to get credentials');
+                }
+
+                return await response.json();
+            }
+
+            async loginDirect() {
+                console.log('→ Getting credentials...');
+                
+                // Get credentials from secure backend
+                const creds = await this.getCredentials();
+                
+                console.log('→ Authenticating directly with MECCA API...');
+                
+                // Make the login call from the BROWSER so cookies get set
+                const response = await fetch(CONFIG.meccaApiUrl, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include', // Important: include cookies
+                    body: JSON.stringify({
+                        username: creds.username,
+                        password: creds.password
+                    })
                 });
 
                 if (!response.ok) {
@@ -186,11 +215,13 @@
                     localStorage.setItem(CONFIG.tokenKey, data.token);
                     localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
                     
-                    console.log('✓ Token obtained');
+                    console.log('✓ Token obtained and cookies set');
+                    console.log('✓ Expires:', new Date(data.expiredOn).toLocaleString());
+                    
                     return true;
                 }
                 
-                throw new Error('Invalid token');
+                throw new Error('Invalid token received');
             }
 
             getToken() {
@@ -204,18 +235,14 @@
             try {
                 console.log('=== Initializing ===');
                 
-                // Authenticate
+                // Authenticate - this sets cookies in the browser
                 if (!authManager.hasValidToken()) {
-                    await authManager.login();
+                    await authManager.loginDirect();
                 } else {
                     console.log('✓ Valid token exists');
                 }
 
-                // Get the token for portal injection
-                const token = authManager.getToken();
-                
-                // Load portal with token in URL (portal must support this)
-                // OR just load portal and let it use its own auth
+                // Now load portal - it should have the cookies
                 loadPortal();
                 
             } catch (error) {
@@ -236,36 +263,8 @@
                     setTimeout(() => loadingScreen.style.display = 'none', 300);
                 }, 500);
             };
-
-            // Try to inject token into portal after load
-            iframe.onload = function() {
-                try {
-                    // Inject token into iframe's localStorage
-                    const token = authManager.getToken();
-                    if (token && iframe.contentWindow) {
-                        iframe.contentWindow.postMessage({
-                            type: 'AUTH_TOKEN',
-                            token: token
-                        }, 'https://report-mecca.platinumfm.com.au');
-                        
-                        console.log('✓ Token sent to portal');
-                    }
-                    
-                    // Show portal
-                    setTimeout(() => {
-                        loadingScreen.classList.add('fade-out');
-                        iframe.classList.add('visible');
-                        setTimeout(() => loadingScreen.style.display = 'none', 300);
-                    }, 500);
-                } catch (e) {
-                    console.warn('Cannot inject token:', e);
-                    // Still show portal even if injection fails
-                    loadingScreen.classList.add('fade-out');
-                    iframe.classList.add('visible');
-                }
-            };
             
-            // Load portal
+            // Load portal - cookies should be available now
             iframe.src = CONFIG.portalUrl;
         }
 
@@ -277,11 +276,11 @@
                 'Check Azure Portal → Configuration → Application Settings';
         }
 
-        // Auto-refresh
+        // Auto-refresh every 6 hours
         setInterval(async () => {
             if (!authManager.hasValidToken()) {
                 try {
-                    await authManager.login();
+                    await authManager.loginDirect();
                     document.getElementById('portal-frame').src = CONFIG.portalUrl;
                 } catch (error) {
                     console.error('Refresh failed:', error);
