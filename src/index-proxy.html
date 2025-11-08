@@ -114,6 +114,7 @@
             border-radius: 8px;
             margin-top: 20px;
             max-width: 500px;
+            text-align: left;
         }
 
         .retry-button {
@@ -149,6 +150,16 @@
             color: #4ade80;
             margin-right: 5px;
         }
+
+        .help-link {
+            margin-top: 15px;
+            font-size: 13px;
+        }
+
+        .help-link a {
+            color: white;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -171,7 +182,7 @@
                target="_blank" 
                class="portal-button" 
                id="launch-button">
-                Open MECCA Portal
+                Open Work Orders
             </a>
             <div class="token-info" id="token-info">
                 <div><span class="checkmark">✓</span> Authentication verified</div>
@@ -185,10 +196,13 @@
 
         <div class="error-container" id="error">
             <div class="error-icon">⚠️</div>
-            <h1>Connection Error</h1>
+            <h1>Authentication Error</h1>
             <div class="status" id="error-text">Unable to authenticate</div>
             <div class="error-message" id="error-details"></div>
             <button class="retry-button" onclick="retryAuth()">Retry Authentication</button>
+            <div class="help-link">
+                <a href="/test.html" target="_blank">Open Test Page</a> to diagnose the issue
+            </div>
         </div>
     </div>
 
@@ -313,6 +327,7 @@
         async function initialize() {
             try {
                 console.log('=== MECCA Portal Authentication ===');
+                console.log('Current domain:', window.location.hostname);
                 updateStatus('Verifying authentication...');
                 
                 // Check if we have an existing token
@@ -357,7 +372,23 @@
             } catch (error) {
                 console.error('=== Authentication Error ===');
                 console.error(error);
-                showError(error.message, 'Please check your credentials in Azure Portal configuration.');
+                
+                let errorDetails = error.message;
+                
+                // Provide helpful error messages
+                if (error.message.includes('401')) {
+                    errorDetails += '\n\n⚠️ This usually means:\n';
+                    errorDetails += '• Credentials not configured in Azure Portal\n';
+                    errorDetails += '• Wrong username or password in Application Settings\n';
+                    errorDetails += '• Custom domain missing configuration\n\n';
+                    errorDetails += '👉 Go to Azure Portal → Your Static Web App → Configuration\n';
+                    errorDetails += '   and verify MECCA_USERNAME and MECCA_PASSWORD are set correctly.';
+                } else if (error.message.includes('Server configuration error')) {
+                    errorDetails += '\n\n⚠️ Azure Function cannot find credentials.\n';
+                    errorDetails += '👉 Check Application Settings in Azure Portal.';
+                }
+                
+                showError(error.message, errorDetails);
             }
         }
 
