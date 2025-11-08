@@ -16,6 +16,7 @@
             height: 100%;
             overflow: hidden;
             font-family: Arial, sans-serif;
+            background: #f5f5f5;
         }
 
         #loading-screen {
@@ -122,16 +123,13 @@
     </style>
 </head>
 <body>
-    <!-- Loading Screen -->
     <div id="loading-screen">
         <div class="spinner"></div>
         <div class="loading-text">Authenticating...</div>
     </div>
 
-    <!-- Portal Iframe -->
     <iframe id="portal-frame" src="about:blank"></iframe>
 
-    <!-- Error Screen -->
     <div id="error-screen" class="error-screen">
         <div class="error-icon">⚠️</div>
         <div class="error-message" id="error-message">Authentication Failed</div>
@@ -150,24 +148,19 @@
         class AuthManager {
             constructor() {
                 this.token = null;
-                this.tokenExpiry = null;
             }
 
             hasValidToken() {
                 const storedToken = localStorage.getItem(CONFIG.tokenKey);
                 const storedExpiry = localStorage.getItem(CONFIG.tokenExpiry);
                 
-                if (!storedToken || !storedExpiry) {
-                    return false;
-                }
+                if (!storedToken || !storedExpiry) return false;
 
                 const expiryDate = new Date(storedExpiry);
-                const now = new Date();
-                const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+                const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
                 
                 if (expiryDate > oneHourFromNow) {
                     this.token = storedToken;
-                    this.tokenExpiry = storedExpiry;
                     return true;
                 }
                 
@@ -175,36 +168,29 @@
             }
 
             async login() {
-                console.log('→ Requesting authentication token...');
+                console.log('→ Authenticating...');
                 
                 const response = await fetch(`${CONFIG.apiProxyUrl}?action=login`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
+                    headers: { 'Content-Type': 'application/json' }
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || `Authentication failed: ${response.status}`);
+                    throw new Error(`Authentication failed: ${response.status}`);
                 }
 
                 const data = await response.json();
                 
                 if (data.token && data.isValidToken) {
                     this.token = data.token;
-                    this.tokenExpiry = data.expiredOn;
-                    
                     localStorage.setItem(CONFIG.tokenKey, data.token);
                     localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
                     
-                    console.log('✓ Token obtained and stored');
-                    console.log('✓ Token expires:', new Date(data.expiredOn).toLocaleString());
-                    
+                    console.log('✓ Token obtained');
                     return true;
-                } else {
-                    throw new Error('Invalid token received from server');
                 }
+                
+                throw new Error('Invalid token');
             }
 
             getToken() {
@@ -216,24 +202,24 @@
 
         async function initialize() {
             try {
-                console.log('=== MECCA Portal Initialization ===');
+                console.log('=== Initializing ===');
                 
-                // Check if we need to authenticate
+                // Authenticate
                 if (!authManager.hasValidToken()) {
-                    console.log('→ No valid token, authenticating...');
                     await authManager.login();
                 } else {
-                    console.log('✓ Using existing token');
+                    console.log('✓ Valid token exists');
                 }
 
-                console.log('→ Loading portal...');
+                // Get the token for portal injection
+                const token = authManager.getToken();
                 
-                // Load portal in iframe
+                // Load portal with token in URL (portal must support this)
+                // OR just load portal and let it use its own auth
                 loadPortal();
                 
             } catch (error) {
-                console.error('=== Initialization Error ===');
-                console.error(error);
+                console.error('Error:', error);
                 showError(error.message);
             }
         }
@@ -242,75 +228,67 @@
             const iframe = document.getElementById('portal-frame');
             const loadingScreen = document.getElementById('loading-screen');
             
-            // Set up iframe load handler
             iframe.onload = function() {
                 console.log('✓ Portal loaded');
-                
-                // Hide loading screen and show iframe
                 setTimeout(() => {
                     loadingScreen.classList.add('fade-out');
                     iframe.classList.add('visible');
-                    
-                    setTimeout(() => {
-                        loadingScreen.style.display = 'none';
-                    }, 300);
+                    setTimeout(() => loadingScreen.style.display = 'none', 300);
                 }, 500);
             };
 
-            iframe.onerror = function() {
-                console.error('✗ Portal failed to load');
-                showError('Failed to load portal');
+            // Try to inject token into portal after load
+            iframe.onload = function() {
+                try {
+                    // Inject token into iframe's localStorage
+                    const token = authManager.getToken();
+                    if (token && iframe.contentWindow) {
+                        iframe.contentWindow.postMessage({
+                            type: 'AUTH_TOKEN',
+                            token: token
+                        }, 'https://report-mecca.platinumfm.com.au');
+                        
+                        console.log('✓ Token sent to portal');
+                    }
+                    
+                    // Show portal
+                    setTimeout(() => {
+                        loadingScreen.classList.add('fade-out');
+                        iframe.classList.add('visible');
+                        setTimeout(() => loadingScreen.style.display = 'none', 300);
+                    }, 500);
+                } catch (e) {
+                    console.warn('Cannot inject token:', e);
+                    // Still show portal even if injection fails
+                    loadingScreen.classList.add('fade-out');
+                    iframe.classList.add('visible');
+                }
             };
             
-            // Load the portal
+            // Load portal
             iframe.src = CONFIG.portalUrl;
-            console.log('→ Portal URL set to:', CONFIG.portalUrl);
         }
 
-        function showError(message, details = '') {
+        function showError(message) {
             document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('portal-frame').style.display = 'none';
             document.getElementById('error-screen').classList.add('show');
             document.getElementById('error-message').textContent = message;
-            
-            if (details) {
-                document.getElementById('error-details').textContent = details;
-            } else if (message.includes('401') || message.includes('Authentication failed')) {
-                document.getElementById('error-details').textContent = 
-                    'Please check your credentials in Azure Portal → Configuration → Application Settings';
-            }
+            document.getElementById('error-details').textContent = 
+                'Check Azure Portal → Configuration → Application Settings';
         }
 
-        // Auto-refresh token every 6 hours
+        // Auto-refresh
         setInterval(async () => {
             if (!authManager.hasValidToken()) {
-                console.log('→ Background token refresh...');
                 try {
                     await authManager.login();
-                    console.log('✓ Token refreshed successfully');
+                    document.getElementById('portal-frame').src = CONFIG.portalUrl;
                 } catch (error) {
-                    console.error('✗ Token refresh failed:', error);
+                    console.error('Refresh failed:', error);
                 }
             }
         }, 6 * 60 * 60 * 1000);
 
-        // Re-authenticate when page becomes visible
-        document.addEventListener('visibilitychange', async () => {
-            if (!document.hidden) {
-                console.log('→ Page visible, checking token...');
-                if (!authManager.hasValidToken()) {
-                    try {
-                        await authManager.login();
-                        // Reload iframe to refresh session
-                        document.getElementById('portal-frame').src = CONFIG.portalUrl;
-                    } catch (error) {
-                        console.error('✗ Token refresh failed:', error);
-                    }
-                }
-            }
-        });
-
-        // Start initialization
         initialize();
     </script>
 </body>
