@@ -5,7 +5,7 @@ This project provides a seamless authentication wrapper for the MECCA Platinum F
 ## 🎯 Project Goal
 
 Create an Azure Static Web App that:
-- Automatically handles authentication to report-mecca.platinumfm.com.au
+- Automatically handles authentication to https://report-mecca.platinumfm.com.au/work-orders-open
 - Provides a simplified login flow for users
 - Can be integrated into other applications
 - Maintains the same URL structure for easy migration when the portal is rebuilt

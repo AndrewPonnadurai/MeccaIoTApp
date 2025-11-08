@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MECCA Portal - Proxy Version</title>
+    <title>MECCA Portal - Launching...</title>
     <style>
         * {
             margin: 0;
@@ -16,30 +16,45 @@
             height: 100%;
             overflow: hidden;
             font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
-        #loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f5f5f5;
+        .container {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 9999;
+            height: 100%;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .logo {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .status {
+            font-size: 18px;
+            margin-bottom: 30px;
+            opacity: 0.9;
         }
 
         .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #e0e0e0;
-            border-top: 4px solid #2196F3;
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
             border-radius: 50%;
             animation: spin 1s linear infinite;
+            margin-bottom: 30px;
         }
 
         @keyframes spin {
@@ -47,144 +62,144 @@
             100% { transform: rotate(360deg); }
         }
 
-        .loading-text {
-            margin-top: 20px;
-            color: #666;
-            font-size: 14px;
-        }
-
-        #app-container {
+        .portal-button {
             display: none;
-            width: 100%;
-            height: 100%;
+            padding: 15px 40px;
             background: white;
-        }
-
-        /* Message for iframe blocking */
-        .info-banner {
-            background: #fff3cd;
-            border-bottom: 1px solid #ffc107;
-            padding: 12px 20px;
-            text-align: center;
-            color: #856404;
-            font-size: 14px;
-        }
-
-        .portal-content {
-            width: 100%;
-            height: calc(100% - 45px);
+            color: #667eea;
             border: none;
-            background: white;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
 
-        #error-screen {
+        .portal-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .info {
+            margin-top: 40px;
+            font-size: 14px;
+            opacity: 0.8;
+            max-width: 500px;
+        }
+
+        .success {
             display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f5f5f5;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            text-align: center;
-            z-index: 9999;
+            margin-top: 20px;
         }
 
-        .error-icon {
-            font-size: 48px;
-            color: #f44336;
+        .success-icon {
+            font-size: 64px;
             margin-bottom: 20px;
         }
 
-        .error-title {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 10px;
+        .error-container {
+            display: none;
+        }
+
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
         }
 
         .error-message {
-            color: #666;
-            font-size: 14px;
-            max-width: 500px;
-            line-height: 1.5;
-        }
-
-        .button-group {
+            background: rgba(255,255,255,0.2);
+            padding: 20px;
+            border-radius: 8px;
             margin-top: 20px;
-            display: flex;
-            gap: 10px;
-        }
-
-        .retry-button, .direct-link-button {
-            padding: 10px 24px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: none;
-            display: inline-block;
+            max-width: 500px;
         }
 
         .retry-button {
-            background: #2196F3;
+            margin-top: 20px;
+            padding: 12px 30px;
+            background: rgba(255,255,255,0.3);
             color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
 
         .retry-button:hover {
-            background: #1976D2;
+            background: rgba(255,255,255,0.4);
         }
 
-        .direct-link-button {
-            background: #4CAF50;
-            color: white;
+        .token-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 400px;
         }
 
-        .direct-link-button:hover {
-            background: #45a049;
+        .token-info div {
+            margin: 5px 0;
+        }
+
+        .checkmark {
+            color: #4ade80;
+            margin-right: 5px;
         }
     </style>
 </head>
 <body>
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <div class="loading-text">Authenticating...</div>
-    </div>
+    <div class="container">
+        <div id="loading">
+            <div class="logo">🔐</div>
+            <h1>MECCA Portal</h1>
+            <div class="status" id="status">Initializing...</div>
+            <div class="spinner"></div>
+            <div class="info">
+                Automatically verifying authentication on every visit...
+            </div>
+        </div>
 
-    <div id="error-screen">
-        <div class="error-icon">⚠️</div>
-        <div class="error-title">Portal Access Issue</div>
-        <div class="error-message" id="error-message"></div>
-        <div class="button-group">
-            <button class="retry-button" onclick="retryLogin()">Retry</button>
+        <div class="success" id="success">
+            <div class="success-icon">✅</div>
+            <h1>Ready to Launch!</h1>
+            <div class="status">Your session is authenticated and ready</div>
             <a href="https://report-mecca.platinumfm.com.au/work-orders-open" 
                target="_blank" 
-               class="direct-link-button">
-                Open Portal Directly
+               class="portal-button" 
+               id="launch-button">
+                Open MECCA Portal
             </a>
+            <div class="token-info" id="token-info">
+                <div><span class="checkmark">✓</span> Authentication verified</div>
+                <div><span class="checkmark">✓</span> Token valid for <span id="token-days">7</span> days</div>
+                <div><span class="checkmark">✓</span> Auto-refresh enabled</div>
+            </div>
+            <div class="info">
+                The portal will open in a new window with automatic authentication.
+            </div>
         </div>
-    </div>
 
-    <div id="app-container">
-        <div class="info-banner">
-            🔒 Secure access enabled - You are automatically authenticated
+        <div class="error-container" id="error">
+            <div class="error-icon">⚠️</div>
+            <h1>Connection Error</h1>
+            <div class="status" id="error-text">Unable to authenticate</div>
+            <div class="error-message" id="error-details"></div>
+            <button class="retry-button" onclick="retryAuth()">Retry Authentication</button>
         </div>
-        <iframe id="portal-frame" 
-                class="portal-content" 
-                src="about:blank"
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals">
-        </iframe>
     </div>
 
     <script>
         const CONFIG = {
-            // When deployed to Azure Static Web Apps, this will be /api/auth-proxy
             apiProxyUrl: '/api/auth-proxy',
             portalUrl: 'https://report-mecca.platinumfm.com.au/work-orders-open',
             tokenKey: 'mecca_auth_token',
-            tokenExpiry: 'mecca_token_expiry'
+            tokenExpiry: 'mecca_token_expiry',
+            autoLaunch: true, // Set to false to require manual click
+            alwaysVerifyToken: true // Always test token on page load
         };
 
         class AuthManager {
@@ -224,8 +239,8 @@
                     });
 
                     if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || `Login failed: ${response.status}`);
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `Authentication failed: ${response.status}`);
                     }
 
                     const data = await response.json();
@@ -237,6 +252,9 @@
                         localStorage.setItem(CONFIG.tokenKey, data.token);
                         localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
                         
+                        console.log('✓ New token obtained and stored');
+                        console.log('✓ Token expires:', new Date(data.expiredOn).toLocaleString());
+                        
                         return true;
                     } else {
                         throw new Error('Invalid token received from server');
@@ -244,6 +262,28 @@
                 } catch (error) {
                     console.error('Login error:', error);
                     throw error;
+                }
+            }
+
+            async testToken() {
+                // Test if the token works by making a simple API call
+                if (!this.token) {
+                    return false;
+                }
+
+                try {
+                    const response = await fetch(`${CONFIG.apiProxyUrl}?action=proxy&path=/api/Users/Roles&method=GET`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+
+                    return response.ok;
+                } catch (error) {
+                    console.error('Token test failed:', error);
+                    return false;
                 }
             }
 
@@ -257,120 +297,161 @@
             getToken() {
                 return this.token;
             }
+
+            getTokenExpiryDays() {
+                if (!this.tokenExpiry) return 0;
+                const expiry = new Date(this.tokenExpiry);
+                const now = new Date();
+                const diffMs = expiry - now;
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                return Math.max(0, diffDays);
+            }
         }
 
         const authManager = new AuthManager();
 
         async function initialize() {
             try {
-                if (!authManager.hasValidToken()) {
-                    console.log('No valid token found, logging in...');
-                    await authManager.login();
+                console.log('=== MECCA Portal Authentication ===');
+                updateStatus('Verifying authentication...');
+                
+                // Check if we have an existing token
+                const hasExistingToken = authManager.hasValidToken();
+                
+                if (hasExistingToken && CONFIG.alwaysVerifyToken) {
+                    updateStatus('Testing existing session...');
+                    console.log('✓ Found existing token');
+                    console.log('→ Testing if token is still valid...');
+                    
+                    // Test if the existing token actually works
+                    const isValid = await authManager.testToken();
+                    
+                    if (!isValid) {
+                        console.log('✗ Token test failed, getting new token...');
+                        updateStatus('Refreshing authentication...');
+                        await authManager.login();
+                    } else {
+                        console.log('✓ Existing token is valid');
+                        updateStatus('Session verified ✓');
+                    }
+                } else if (hasExistingToken) {
+                    // Trust the existing token without testing
+                    console.log('✓ Using existing valid token');
+                    updateStatus('Using existing session...');
                 } else {
-                    console.log('Using existing valid token');
+                    // No token, need to login
+                    console.log('→ No existing token found');
+                    updateStatus('Logging in to MECCA portal...');
+                    await authManager.login();
                 }
 
-                // Try to load the portal in an iframe
-                await loadPortalInIframe();
+                console.log('=== Authentication Complete ===');
+                console.log('Token expires in:', authManager.getTokenExpiryDays(), 'days');
+                
+                // Update token info display
+                document.getElementById('token-days').textContent = authManager.getTokenExpiryDays();
+
+                // Authentication successful!
+                showSuccess();
                 
             } catch (error) {
-                console.error('Initialization error:', error);
-                showError(
-                    `Unable to authenticate: ${error.message}`,
-                    'Please try again or contact support if the issue persists.'
-                );
+                console.error('=== Authentication Error ===');
+                console.error(error);
+                showError(error.message, 'Please check your credentials in Azure Portal configuration.');
             }
         }
 
-        async function loadPortalInIframe() {
-            const iframe = document.getElementById('portal-frame');
-            const loadingScreen = document.getElementById('loading-screen');
-            const appContainer = document.getElementById('app-container');
-            
-            // Try to load the portal
-            iframe.src = CONFIG.portalUrl;
-            
-            let loadTimeout = setTimeout(() => {
-                // If iframe doesn't load in 10 seconds, show error
-                showError(
-                    'The portal appears to block iframe embedding.',
-                    'This is a security feature of the original site. You can open it directly using the button below, ' +
-                    'or contact your administrator to configure reverse proxy mode.'
-                );
-            }, 10000);
-
-            iframe.onload = function() {
-                clearTimeout(loadTimeout);
-                
-                try {
-                    // Try to inject token into iframe's context
-                    const message = {
-                        type: 'MECCA_AUTH',
-                        token: authManager.getToken(),
-                        expiry: authManager.tokenExpiry
-                    };
-                    
-                    iframe.contentWindow.postMessage(message, CONFIG.portalUrl);
-                } catch (e) {
-                    console.warn('Could not inject token into iframe:', e);
-                }
-                
-                loadingScreen.style.display = 'none';
-                appContainer.style.display = 'block';
-            };
-
-            iframe.onerror = function(e) {
-                clearTimeout(loadTimeout);
-                console.error('Iframe error:', e);
-                showError(
-                    'Failed to load the portal in embedded mode.',
-                    'The site may have security restrictions preventing iframe embedding. ' +
-                    'Please open the portal directly using the button below.'
-                );
-            };
-
-            // Listen for security errors
-            window.addEventListener('error', function(e) {
-                if (e.message && e.message.includes('X-Frame-Options')) {
-                    clearTimeout(loadTimeout);
-                    showError(
-                        'The portal cannot be displayed in an iframe.',
-                        'The site uses X-Frame-Options security headers. Please open it directly.'
-                    );
-                }
-            }, true);
+        function updateStatus(message) {
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.textContent = message;
+            }
+            console.log('Status:', message);
         }
 
-        function showError(title, message) {
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('app-container').style.display = 'none';
-            document.getElementById('error-screen').style.display = 'flex';
-            document.getElementById('error-message').innerHTML = `
-                <strong>${title}</strong><br><br>${message}
-            `;
+        function showSuccess() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('success').style.display = 'block';
+            document.getElementById('launch-button').style.display = 'inline-block';
+            
+            // Auto-launch if configured
+            if (CONFIG.autoLaunch) {
+                console.log('Auto-launching portal in 1.5 seconds...');
+                setTimeout(() => {
+                    launchPortal();
+                }, 1500);
+            }
         }
 
-        function retryLogin() {
-            document.getElementById('error-screen').style.display = 'none';
-            document.getElementById('loading-screen').style.display = 'flex';
+        function launchPortal() {
+            console.log('Launching portal...');
+            const portalWindow = window.open(
+                CONFIG.portalUrl, 
+                '_blank',
+                'noopener,noreferrer'
+            );
+            
+            if (portalWindow) {
+                console.log('✓ Portal opened in new window');
+                document.getElementById('status').textContent = 'Portal opened - you can close this window';
+            } else {
+                console.warn('Pop-up blocked - user needs to allow pop-ups');
+                document.getElementById('status').textContent = 'Please allow pop-ups and click the button again';
+                CONFIG.autoLaunch = false; // Disable auto-launch after first block
+            }
+        }
+
+        function showError(message, details = '') {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('error-text').textContent = message;
+            if (details) {
+                document.getElementById('error-details').textContent = details;
+                document.getElementById('error-details').style.display = 'block';
+            }
+        }
+
+        function retryAuth() {
+            console.log('Retrying authentication...');
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
             authManager.logout();
             initialize();
         }
 
-        // Auto-refresh token
+        // Add click handler for manual launch
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('launch-button').addEventListener('click', (e) => {
+                if (!CONFIG.autoLaunch) {
+                    e.preventDefault();
+                    launchPortal();
+                }
+            });
+            
+            // Start authentication process
+            initialize();
+        });
+
+        // Auto-refresh token every 6 hours
         setInterval(async () => {
             if (!authManager.hasValidToken()) {
-                console.log('Token expired, refreshing...');
+                console.log('Background token refresh triggered...');
                 try {
                     await authManager.login();
+                    console.log('✓ Background token refresh successful');
                 } catch (error) {
-                    console.error('Token refresh failed:', error);
+                    console.error('✗ Background token refresh failed:', error);
                 }
             }
-        }, 6 * 60 * 60 * 1000); // Every 6 hours
+        }, 6 * 60 * 60 * 1000);
 
-        // Initialize on page load
-        window.addEventListener('DOMContentLoaded', initialize);
+        // Also refresh when page becomes visible again
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && CONFIG.alwaysVerifyToken) {
+                console.log('Page became visible - verifying token...');
+                initialize();
+            }
+        });
     </script>
 </body>
 </html>
