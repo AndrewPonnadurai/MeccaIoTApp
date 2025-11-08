@@ -5,334 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MECCA IoT Portal</title>
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body, html {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-
-        #loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f5f5f5;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 9999;
+            color: white;
         }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid #e0e0e0;
-            border-top: 4px solid #2196F3;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .loading-text {
-            margin-top: 20px;
-            color: #666;
-            font-size: 14px;
-        }
-
-        #error-screen {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f5f5f5;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+        .message {
             text-align: center;
-            z-index: 9999;
+            padding: 40px;
         }
-
-        .error-icon {
+        h1 {
             font-size: 48px;
-            color: #f44336;
             margin-bottom: 20px;
         }
-
-        .error-title {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .error-message {
-            color: #666;
-            font-size: 14px;
-            max-width: 400px;
-        }
-
-        .retry-button {
-            margin-top: 20px;
-            padding: 10px 24px;
-            background: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        .retry-button:hover {
-            background: #1976D2;
-        }
-
-        #portal-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: none;
+        p {
+            font-size: 18px;
         }
     </style>
 </head>
 <body>
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <div class="loading-text">Connecting to portal...</div>
+    <div class="message">
+        <h1>🔐 MECCA Portal</h1>
+        <p>Alternative landing page</p>
+        <p><a href="/index-proxy.html" style="color: white;">Go to Portal Launcher</a></p>
     </div>
-
-    <div id="error-screen">
-        <div class="error-icon">⚠️</div>
-        <div class="error-title">Connection Error</div>
-        <div class="error-message" id="error-message">
-            Unable to connect to the portal. Please check your credentials.
-        </div>
-        <button class="retry-button" onclick="retryLogin()">Retry</button>
-    </div>
-
-    <iframe id="portal-frame" src="about:blank"></iframe>
-
-    <script>
-        // Configuration - STORE THESE SECURELY OR USE AZURE KEY VAULT
-        const CONFIG = {
-            apiBaseUrl: 'https://api-mecca.platinumfm.com.au',
-            portalUrl: 'https://report-mecca.platinumfm.com.au/work-orders-open',
-            // WARNING: Storing credentials in frontend is NOT secure
-            // This is a temporary solution. Move to Azure Functions + Key Vault for production
-            credentials: {
-                username: 'YOUR_USERNAME_HERE', // Replace with actual username
-                password: 'YOUR_PASSWORD_HERE'  // Replace with actual password
-            },
-            tokenKey: 'mecca_auth_token',
-            tokenExpiry: 'mecca_token_expiry'
-        };
-
-        class AuthManager {
-            constructor() {
-                this.token = null;
-                this.tokenExpiry = null;
-            }
-
-            // Check if we have a valid token
-            hasValidToken() {
-                const storedToken = localStorage.getItem(CONFIG.tokenKey);
-                const storedExpiry = localStorage.getItem(CONFIG.tokenExpiry);
-                
-                if (!storedToken || !storedExpiry) {
-                    return false;
-                }
-
-                const expiryDate = new Date(storedExpiry);
-                const now = new Date();
-                
-                // Check if token expires in less than 1 hour, refresh if so
-                const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
-                
-                if (expiryDate > oneHourFromNow) {
-                    this.token = storedToken;
-                    this.tokenExpiry = storedExpiry;
-                    return true;
-                }
-                
-                return false;
-            }
-
-            // Login and get token
-            async login() {
-                try {
-                    const response = await fetch(`${CONFIG.apiBaseUrl}/api/Users/Login`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(CONFIG.credentials)
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`Login failed: ${response.status} ${response.statusText}`);
-                    }
-
-                    const data = await response.json();
-                    
-                    if (data.token && data.isValidToken) {
-                        this.token = data.token;
-                        this.tokenExpiry = data.expiredOn;
-                        
-                        // Store token
-                        localStorage.setItem(CONFIG.tokenKey, data.token);
-                        localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
-                        
-                        return true;
-                    } else {
-                        throw new Error('Invalid token received');
-                    }
-                } catch (error) {
-                    console.error('Login error:', error);
-                    throw error;
-                }
-            }
-
-            // Clear token
-            logout() {
-                this.token = null;
-                this.tokenExpiry = null;
-                localStorage.removeItem(CONFIG.tokenKey);
-                localStorage.removeItem(CONFIG.tokenExpiry);
-            }
-
-            // Get token for use
-            getToken() {
-                return this.token;
-            }
-        }
-
-        const authManager = new AuthManager();
-
-        // Main initialization
-        async function initialize() {
-            try {
-                // Check if we have a valid token
-                if (!authManager.hasValidToken()) {
-                    console.log('No valid token found, logging in...');
-                    await authManager.login();
-                } else {
-                    console.log('Using existing valid token');
-                }
-
-                // Token is ready, load the portal
-                await loadPortal();
-                
-            } catch (error) {
-                console.error('Initialization error:', error);
-                showError(error.message);
-            }
-        }
-
-        // Load the portal in iframe
-        async function loadPortal() {
-            const iframe = document.getElementById('portal-frame');
-            const loadingScreen = document.getElementById('loading-screen');
-            
-            // Set up message passing to inject token into iframe
-            window.addEventListener('message', handlePortalMessage);
-            
-            // Load the portal
-            iframe.src = CONFIG.portalUrl;
-            
-            // Wait for iframe to load
-            iframe.onload = function() {
-                // Inject the token into the iframe's localStorage
-                try {
-                    // Try to inject token via postMessage
-                    iframe.contentWindow.postMessage({
-                        type: 'AUTH_TOKEN',
-                        token: authManager.getToken(),
-                        expiry: authManager.tokenExpiry
-                    }, CONFIG.portalUrl);
-                    
-                    // Hide loading, show iframe
-                    setTimeout(() => {
-                        loadingScreen.style.display = 'none';
-                        iframe.style.display = 'block';
-                    }, 500);
-                    
-                } catch (e) {
-                    console.error('Error injecting token:', e);
-                    // Due to CORS, direct localStorage access won't work
-                    // The iframe needs to handle the token itself
-                    loadingScreen.style.display = 'none';
-                    iframe.style.display = 'block';
-                }
-            };
-
-            iframe.onerror = function() {
-                showError('Failed to load portal. The site may not allow iframe embedding.');
-            };
-        }
-
-        // Handle messages from iframe
-        function handlePortalMessage(event) {
-            // Verify origin
-            if (event.origin !== CONFIG.portalUrl) {
-                return;
-            }
-
-            // Handle different message types
-            if (event.data.type === 'REQUEST_TOKEN') {
-                // Portal is requesting the token
-                event.source.postMessage({
-                    type: 'AUTH_TOKEN',
-                    token: authManager.getToken(),
-                    expiry: authManager.tokenExpiry
-                }, event.origin);
-            }
-        }
-
-        // Show error
-        function showError(message) {
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('error-screen').style.display = 'flex';
-            document.getElementById('error-message').textContent = message;
-        }
-
-        // Retry login
-        function retryLogin() {
-            document.getElementById('error-screen').style.display = 'none';
-            document.getElementById('loading-screen').style.display = 'flex';
-            authManager.logout();
-            initialize();
-        }
-
-        // Start the app
-        window.addEventListener('DOMContentLoaded', initialize);
-
-        // Periodic token refresh (every 6 hours)
-        setInterval(async () => {
-            if (!authManager.hasValidToken()) {
-                console.log('Token expired, refreshing...');
-                try {
-                    await authManager.login();
-                    // Reload the portal with new token
-                    location.reload();
-                } catch (error) {
-                    console.error('Token refresh failed:', error);
-                }
-            }
-        }, 6 * 60 * 60 * 1000);
-    </script>
 </body>
 </html>

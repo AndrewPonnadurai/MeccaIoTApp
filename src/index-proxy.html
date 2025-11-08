@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MECCA Portal - Launching ...</title>
+    <title>MECCA Portal - Launching...</title>
     <style>
         * {
             margin: 0;
@@ -114,6 +114,7 @@
             border-radius: 8px;
             margin-top: 20px;
             max-width: 500px;
+            text-align: left;
         }
 
         .retry-button {
@@ -131,6 +132,34 @@
         .retry-button:hover {
             background: rgba(255,255,255,0.4);
         }
+
+        .token-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            font-size: 13px;
+            max-width: 400px;
+        }
+
+        .token-info div {
+            margin: 5px 0;
+        }
+
+        .checkmark {
+            color: #4ade80;
+            margin-right: 5px;
+        }
+
+        .help-link {
+            margin-top: 15px;
+            font-size: 13px;
+        }
+
+        .help-link a {
+            color: white;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -138,10 +167,10 @@
         <div id="loading">
             <div class="logo">🔐</div>
             <h1>MECCA Portal</h1>
-            <div class="status" id="status">Authenticating...</div>
+            <div class="status" id="status">Initializing...</div>
             <div class="spinner"></div>
             <div class="info">
-                Please wait while we securely connect you to the portal...
+                Automatically verifying authentication on every visit...
             </div>
         </div>
 
@@ -149,12 +178,17 @@
             <div class="success-icon">✅</div>
             <h1>Ready to Launch!</h1>
             <div class="status">Your session is authenticated and ready</div>
-            <a href="https://report-mecca.platinumfm.com.au" 
+            <a href="https://report-mecca.platinumfm.com.au/work-orders-open" 
                target="_blank" 
                class="portal-button" 
                id="launch-button">
-                Open MECCA Portal
+                Open Work Orders
             </a>
+            <div class="token-info" id="token-info">
+                <div><span class="checkmark">✓</span> Authentication verified</div>
+                <div><span class="checkmark">✓</span> Token valid for <span id="token-days">7</span> days</div>
+                <div><span class="checkmark">✓</span> Auto-refresh enabled</div>
+            </div>
             <div class="info">
                 The portal will open in a new window with automatic authentication.
             </div>
@@ -162,20 +196,24 @@
 
         <div class="error-container" id="error">
             <div class="error-icon">⚠️</div>
-            <h1>Connection Error</h1>
+            <h1>Authentication Error</h1>
             <div class="status" id="error-text">Unable to authenticate</div>
             <div class="error-message" id="error-details"></div>
-            <button class="retry-button" onclick="retryAuth()">Retry</button>
+            <button class="retry-button" onclick="retryAuth()">Retry Authentication</button>
+            <div class="help-link">
+                <a href="/test.html" target="_blank">Open Test Page</a> to diagnose the issue
+            </div>
         </div>
     </div>
 
     <script>
         const CONFIG = {
             apiProxyUrl: '/api/auth-proxy',
-            portalUrl: 'https://report-mecca.platinumfm.com.au',
+            portalUrl: 'https://report-mecca.platinumfm.com.au/work-orders-open',
             tokenKey: 'mecca_auth_token',
             tokenExpiry: 'mecca_token_expiry',
-            autoLaunch: true // Set to false to require manual click
+            autoLaunch: true,
+            alwaysVerifyToken: true
         };
 
         class AuthManager {
@@ -228,8 +266,8 @@
                         localStorage.setItem(CONFIG.tokenKey, data.token);
                         localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
                         
-                        // Also try to set a cookie for the portal domain
-                        this.setPortalCookie();
+                        console.log('✓ New token obtained and stored');
+                        console.log('✓ Token expires:', new Date(data.expiredOn).toLocaleString());
                         
                         return true;
                     } else {
@@ -241,13 +279,24 @@
                 }
             }
 
-            setPortalCookie() {
-                // Attempt to set cookie for portal (may not work due to cross-origin)
-                // This is a best-effort approach
+            async testToken() {
+                if (!this.token) {
+                    return false;
+                }
+
                 try {
-                    document.cookie = `PFM_TOKEN=${this.token}; domain=.platinumfm.com.au; path=/; max-age=604800; secure; samesite=none`;
-                } catch (e) {
-                    console.warn('Could not set cross-domain cookie:', e);
+                    const response = await fetch(`${CONFIG.apiProxyUrl}?action=proxy&path=/api/Users/Roles&method=GET`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        }
+                    });
+
+                    return response.ok;
+                } catch (error) {
+                    console.error('Token test failed:', error);
+                    return false;
                 }
             }
 
@@ -261,32 +310,86 @@
             getToken() {
                 return this.token;
             }
+
+            getTokenExpiryDays() {
+                if (!this.tokenExpiry) return 0;
+                const expiry = new Date(this.tokenExpiry);
+                const now = new Date();
+                const diffMs = expiry - now;
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                return Math.max(0, diffDays);
+            }
         }
 
         const authManager = new AuthManager();
 
         async function initialize() {
             try {
-                updateStatus('Checking credentials...');
+                console.log('=== MECCA Portal Authentication ===');
+                console.log('Current domain:', window.location.hostname);
+                updateStatus('Verifying authentication...');
                 
-                if (!authManager.hasValidToken()) {
+                const hasExistingToken = authManager.hasValidToken();
+                
+                if (hasExistingToken && CONFIG.alwaysVerifyToken) {
+                    updateStatus('Testing existing session...');
+                    console.log('✓ Found existing token');
+                    console.log('→ Testing if token is still valid...');
+                    
+                    const isValid = await authManager.testToken();
+                    
+                    if (!isValid) {
+                        console.log('✗ Token test failed, getting new token...');
+                        updateStatus('Refreshing authentication...');
+                        await authManager.login();
+                    } else {
+                        console.log('✓ Existing token is valid');
+                        updateStatus('Session verified ✓');
+                    }
+                } else if (hasExistingToken) {
+                    console.log('✓ Using existing valid token');
+                    updateStatus('Using existing session...');
+                } else {
+                    console.log('→ No existing token found');
                     updateStatus('Logging in to MECCA portal...');
                     await authManager.login();
-                } else {
-                    updateStatus('Using existing session...');
                 }
 
-                // Authentication successful!
+                console.log('=== Authentication Complete ===');
+                console.log('Token expires in:', authManager.getTokenExpiryDays(), 'days');
+                
+                document.getElementById('token-days').textContent = authManager.getTokenExpiryDays();
+
                 showSuccess();
                 
             } catch (error) {
-                console.error('Initialization error:', error);
-                showError(error.message);
+                console.error('=== Authentication Error ===');
+                console.error(error);
+                
+                let errorDetails = error.message;
+                
+                if (error.message.includes('401')) {
+                    errorDetails += '\n\n⚠️ This usually means:\n';
+                    errorDetails += '• Credentials not configured in Azure Portal\n';
+                    errorDetails += '• Wrong username or password in Application Settings\n';
+                    errorDetails += '• Custom domain missing configuration\n\n';
+                    errorDetails += '👉 Go to Azure Portal → Your Static Web App → Configuration\n';
+                    errorDetails += '   and verify MECCA_USERNAME and MECCA_PASSWORD are set correctly.';
+                } else if (error.message.includes('Server configuration error')) {
+                    errorDetails += '\n\n⚠️ Azure Function cannot find credentials.\n';
+                    errorDetails += '👉 Check Application Settings in Azure Portal.';
+                }
+                
+                showError(error.message, errorDetails);
             }
         }
 
         function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.textContent = message;
+            }
+            console.log('Status:', message);
         }
 
         function showSuccess() {
@@ -294,8 +397,8 @@
             document.getElementById('success').style.display = 'block';
             document.getElementById('launch-button').style.display = 'inline-block';
             
-            // Auto-launch if configured
             if (CONFIG.autoLaunch) {
+                console.log('Auto-launching portal in 1.5 seconds...');
                 setTimeout(() => {
                     launchPortal();
                 }, 1500);
@@ -303,8 +406,7 @@
         }
 
         function launchPortal() {
-            // Open portal with token in URL hash (portal would need to read this)
-            const token = authManager.getToken();
+            console.log('Launching portal...');
             const portalWindow = window.open(
                 CONFIG.portalUrl, 
                 '_blank',
@@ -312,23 +414,12 @@
             );
             
             if (portalWindow) {
-                // Try to communicate token via postMessage (may not work due to cross-origin)
-                setTimeout(() => {
-                    try {
-                        portalWindow.postMessage({
-                            type: 'MECCA_AUTH_TOKEN',
-                            token: token,
-                            expiry: authManager.tokenExpiry
-                        }, CONFIG.portalUrl);
-                    } catch (e) {
-                        console.warn('Could not send token to portal window:', e);
-                    }
-                }, 1000);
-                
-                // Show message
-                document.getElementById('status').textContent = 'Portal opened in new window';
+                console.log('✓ Portal opened in new window');
+                document.getElementById('status').textContent = 'Portal opened - you can close this window';
             } else {
+                console.warn('Pop-up blocked - user needs to allow pop-ups');
                 document.getElementById('status').textContent = 'Please allow pop-ups and click the button again';
+                CONFIG.autoLaunch = false;
             }
         }
 
@@ -343,13 +434,13 @@
         }
 
         function retryAuth() {
+            console.log('Retrying authentication...');
             document.getElementById('error').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
             authManager.logout();
             initialize();
         }
 
-        // Add click handler for manual launch
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('launch-button').addEventListener('click', (e) => {
                 if (!CONFIG.autoLaunch) {
@@ -361,17 +452,24 @@
             initialize();
         });
 
-        // Auto-refresh token
         setInterval(async () => {
             if (!authManager.hasValidToken()) {
-                console.log('Token expired, refreshing...');
+                console.log('Background token refresh triggered...');
                 try {
                     await authManager.login();
+                    console.log('✓ Background token refresh successful');
                 } catch (error) {
-                    console.error('Token refresh failed:', error);
+                    console.error('✗ Background token refresh failed:', error);
                 }
             }
         }, 6 * 60 * 60 * 1000);
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && CONFIG.alwaysVerifyToken) {
+                console.log('Page became visible - verifying token...');
+                initialize();
+            }
+        });
     </script>
 </body>
 </html>
