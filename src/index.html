@@ -3,14 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MECCA Portal</title>
+    <title>MECCA Niagara Portal</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body, html {
             width: 100%;
             height: 100%;
@@ -36,7 +32,6 @@
 
         #loading-screen.fade-out {
             opacity: 0;
-            pointer-events: none;
         }
 
         .spinner {
@@ -57,6 +52,12 @@
         .loading-text {
             color: #666;
             font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .loading-detail {
+            color: #999;
+            font-size: 12px;
         }
 
         #portal-frame {
@@ -72,21 +73,13 @@
 
         .error-screen {
             display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #f5f5f5;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 40px;
             text-align: center;
+            padding: 40px;
+            max-width: 500px;
         }
 
         .error-screen.show {
-            display: flex;
+            display: block;
         }
 
         .error-icon {
@@ -94,199 +87,353 @@
             margin-bottom: 20px;
         }
 
-        .error-message {
+        .error-title {
+            font-size: 24px;
             color: #d32f2f;
-            font-size: 18px;
             margin-bottom: 10px;
         }
 
-        .error-details {
+        .error-message {
             color: #666;
             font-size: 14px;
-            max-width: 500px;
+            margin-bottom: 20px;
+            line-height: 1.6;
         }
 
-        .retry-button {
-            margin-top: 20px;
-            padding: 10px 30px;
+        .manual-login-btn {
+            padding: 12px 30px;
             background: #2196F3;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
         }
 
-        .retry-button:hover {
+        .manual-login-btn:hover {
             background: #1976D2;
+        }
+
+        .retry-note {
+            margin-top: 15px;
+            color: #999;
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
     <div id="loading-screen">
-        <div class="spinner"></div>
-        <div class="loading-text">Authenticating...</div>
+        <div class="spinner" id="spinner"></div>
+        <div class="loading-text" id="loading-text">Checking authentication...</div>
+        <div class="loading-detail" id="loading-detail">Please wait</div>
+        
+        <div class="error-screen" id="error-screen">
+            <div class="error-icon">⚠️</div>
+            <div class="error-title">Authentication Required</div>
+            <div class="error-message" id="error-message">
+                Please log in to access the portal.
+            </div>
+            <a href="https://mecca.ath.cx/login" target="_blank" class="manual-login-btn" onclick="handleManualLogin()">
+                Log In to Niagara
+            </a>
+            <div class="retry-note">
+                After logging in, close the login window and return here.
+            </div>
+        </div>
     </div>
 
+    <!-- Main portal iframe -->
     <iframe id="portal-frame" src="about:blank"></iframe>
-
-    <div id="error-screen" class="error-screen">
-        <div class="error-icon">⚠️</div>
-        <div class="error-message" id="error-message">Authentication Failed</div>
-        <div class="error-details" id="error-details"></div>
-        <button class="retry-button" onclick="location.reload()">Retry</button>
-    </div>
 
     <script>
         const CONFIG = {
-            apiProxyUrl: '/api/auth-proxy',
-            portalUrl: 'https://report-mecca.platinumfm.com.au/work-orders-open',
-            tokenKey: 'mecca_auth_token',
-            tokenExpiry: 'mecca_token_expiry'
+            portalUrl: 'https://mecca.ath.cx/ord/station:%7Cslot:/Drivers/NiagaraNetwork/IOPRO/points/MECCA%7Cview:Graphic',
+            loginUrl: 'https://mecca.ath.cx/login',
+            checkKey: 'mecca_niagara_auth_check',
+            maxLoginAttempts: 3
         };
 
-        class AuthManager {
-            constructor() {
-                this.token = null;
-            }
+        let loginAttempts = 0;
+        let loginWindow = null;
+        let checkInterval = null;
 
-            hasValidToken() {
-                const storedToken = localStorage.getItem(CONFIG.tokenKey);
-                const storedExpiry = localStorage.getItem(CONFIG.tokenExpiry);
-                
-                if (!storedToken || !storedExpiry) return false;
-
-                const expiryDate = new Date(storedExpiry);
-                const oneHourFromNow = new Date(Date.now() + 60 * 60 * 1000);
-                
-                if (expiryDate > oneHourFromNow) {
-                    this.token = storedToken;
-                    return true;
-                }
-                
-                return false;
-            }
-
-            async login() {
-                console.log('→ Authenticating with cookie domain rewriting...');
-                
-                // Call Azure Function which will set cookies for parent domain
-                const response = await fetch(`${CONFIG.apiProxyUrl}?action=login`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include' // CRITICAL: Allows cookies to be set and sent
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || `Authentication failed: ${response.status}`);
-                }
-
-                const data = await response.json();
-                
-                if (data.token && data.isValidToken) {
-                    this.token = data.token;
-                    localStorage.setItem(CONFIG.tokenKey, data.token);
-                    localStorage.setItem(CONFIG.tokenExpiry, data.expiredOn);
-                    
-                    console.log('✓ Token obtained');
-                    console.log('✓ Cookies set for parent domain:', data.cookiesSet || 0);
-                    console.log('✓ Token expires:', new Date(data.expiredOn).toLocaleString());
-                    
-                    return true;
-                }
-                
-                throw new Error('Invalid token received');
-            }
-
-            getToken() {
-                return this.token;
-            }
-        }
-
-        const authManager = new AuthManager();
-
-        async function initialize() {
-            try {
-                console.log('=== MECCA Portal Initialization ===');
-                console.log('Current domain:', window.location.hostname);
-                
-                // Authenticate - Azure Function will set cookies for .platinumfm.com.au
-                if (!authManager.hasValidToken()) {
-                    await authManager.login();
-                } else {
-                    console.log('✓ Valid token exists');
-                }
-
-                // Give cookies a moment to propagate
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // Load portal - should now have access to cookies
-                console.log('→ Loading portal with shared cookies...');
-                loadPortal();
-                
-            } catch (error) {
-                console.error('=== Initialization Error ===');
-                console.error(error);
-                showError(error.message);
-            }
-        }
-
-        function loadPortal() {
-            const iframe = document.getElementById('portal-frame');
-            const loadingScreen = document.getElementById('loading-screen');
-            
-            iframe.onload = function() {
-                console.log('✓ Portal loaded');
-                setTimeout(() => {
-                    loadingScreen.classList.add('fade-out');
-                    iframe.classList.add('visible');
-                    setTimeout(() => loadingScreen.style.display = 'none', 300);
-                }, 500);
-            };
-            
-            iframe.onerror = function() {
-                console.error('✗ Portal failed to load');
-                showError('Portal failed to load');
-            };
-            
-            // Load portal
-            iframe.src = CONFIG.portalUrl;
+        function updateLoadingText(text, detail = '') {
+            const textEl = document.getElementById('loading-text');
+            const detailEl = document.getElementById('loading-detail');
+            if (textEl) textEl.textContent = text;
+            if (detailEl) detailEl.textContent = detail;
         }
 
         function showError(message) {
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('error-screen').classList.add('show');
-            document.getElementById('error-message').textContent = message;
-            document.getElementById('error-details').textContent = 
-                'Check Azure Portal → Configuration → Application Settings';
+            const spinner = document.getElementById('spinner');
+            const loadingText = document.getElementById('loading-text');
+            const loadingDetail = document.getElementById('loading-detail');
+            const errorScreen = document.getElementById('error-screen');
+            const errorMessage = document.getElementById('error-message');
+            
+            if (spinner) spinner.style.display = 'none';
+            if (loadingText) loadingText.style.display = 'none';
+            if (loadingDetail) loadingDetail.style.display = 'none';
+            if (errorMessage) errorMessage.textContent = message;
+            if (errorScreen) errorScreen.classList.add('show');
         }
 
-        // Auto-refresh token every 6 hours
-        setInterval(async () => {
-            if (!authManager.hasValidToken()) {
-                console.log('→ Background token refresh...');
-                try {
-                    await authManager.login();
-                    console.log('✓ Token refreshed, reloading portal...');
-                    document.getElementById('portal-frame').src = CONFIG.portalUrl;
-                } catch (error) {
-                    console.error('✗ Token refresh failed:', error);
-                }
-            }
-        }, 6 * 60 * 60 * 1000);
+        function handleManualLogin() {
+            // Mark that user is attempting manual login
+            console.log('→ User initiated manual login');
+            sessionStorage.setItem('manual_login_attempt', 'true');
+        }
 
-        // Re-authenticate when page becomes visible
-        document.addEventListener('visibilitychange', async () => {
-            if (!document.hidden && !authManager.hasValidToken()) {
-                console.log('→ Page visible, refreshing token...');
+        async function attemptAutoLogin() {
+            return new Promise((resolve, reject) => {
+                loginAttempts++;
+                console.log(`→ Auto-login attempt ${loginAttempts}/${CONFIG.maxLoginAttempts}`);
+                updateLoadingText('Opening login window...', `Attempt ${loginAttempts}/${CONFIG.maxLoginAttempts}`);
+
+                // Open login popup
+                loginWindow = window.open(
+                    CONFIG.loginUrl,
+                    'niagara-login',
+                    'width=500,height=600,menubar=no,toolbar=no,location=no,status=no'
+                );
+
+                if (!loginWindow) {
+                    console.error('✗ Popup blocked');
+                    reject(new Error('Popup blocked by browser'));
+                    return;
+                }
+
+                console.log('✓ Login popup opened');
+                updateLoadingText('Login window opened', 'Waiting for you to log in...');
+
+                let checkCount = 0;
+                const maxChecks = 120; // 2 minutes max
+
+                // Monitor the popup
+                checkInterval = setInterval(() => {
+                    checkCount++;
+
+                    try {
+                        // Check if window was closed by user
+                        if (loginWindow.closed) {
+                            clearInterval(checkInterval);
+                            console.log('→ Login window closed by user');
+                            
+                            // Give it a moment for session to propagate
+                            setTimeout(() => {
+                                resolve(true);
+                            }, 1000);
+                            return;
+                        }
+
+                        // Try to access window location (will fail if on different domain)
+                        const loginUrl = loginWindow.location.href;
+                        
+                        // If we can read the URL and it's not the login page, authentication succeeded
+                        if (!loginUrl.includes('/login') && loginUrl.includes('mecca.ath.cx')) {
+                            clearInterval(checkInterval);
+                            console.log('✓ Login detected - redirected from login page');
+                            loginWindow.close();
+                            resolve(true);
+                            return;
+                        }
+
+                    } catch (e) {
+                        // Cross-origin error is expected while on login page
+                        // This is normal and means user is still on login page
+                    }
+
+                    // Timeout after 2 minutes
+                    if (checkCount >= maxChecks) {
+                        clearInterval(checkInterval);
+                        console.log('→ Login timeout (2 minutes)');
+                        if (loginWindow && !loginWindow.closed) {
+                            loginWindow.close();
+                        }
+                        reject(new Error('Login timeout'));
+                    }
+                }, 1000);
+            });
+        }
+
+        async function loadPortal() {
+            const iframe = document.getElementById('portal-frame');
+            const loadingScreen = document.getElementById('loading-screen');
+            
+            console.log('→ Loading portal...');
+            console.log('→ Target URL:', CONFIG.portalUrl);
+            updateLoadingText('Loading portal...', 'Almost there');
+            
+            return new Promise((resolve, reject) => {
+                let hasLoaded = false;
+                let loadTimeout;
+
+                iframe.onload = function() {
+                    if (hasLoaded) return;
+                    hasLoaded = true;
+                    
+                    clearTimeout(loadTimeout);
+                    console.log('✓ Portal iframe loaded');
+
+                    // Wait to check if we got redirected to login
+                    setTimeout(() => {
+                        try {
+                            const iframeLocation = iframe.contentWindow.location.href;
+                            
+                            if (iframeLocation.includes('/login')) {
+                                console.log('→ Portal redirected to login');
+                                reject(new Error('Not authenticated'));
+                            } else {
+                                console.log('✓ Portal authenticated');
+                                resolve();
+                            }
+                        } catch (e) {
+                            // Cross-origin error - assume success
+                            console.log('✓ Portal loaded (cross-origin check blocked)');
+                            resolve();
+                        }
+                    }, 2000);
+                };
+
+                iframe.onerror = function() {
+                    clearTimeout(loadTimeout);
+                    hasLoaded = true;
+                    console.error('✗ Portal failed to load');
+                    reject(new Error('Portal failed to load'));
+                };
+
+                // Timeout after 30 seconds
+                loadTimeout = setTimeout(() => {
+                    if (!hasLoaded) {
+                        hasLoaded = true;
+                        console.error('✗ Portal load timeout');
+                        reject(new Error('Portal load timeout'));
+                    }
+                }, 30000);
+
+                iframe.src = CONFIG.portalUrl;
+            });
+        }
+
+        function showPortal() {
+            const iframe = document.getElementById('portal-frame');
+            const loadingScreen = document.getElementById('loading-screen');
+            
+            console.log('✓ Showing portal');
+            sessionStorage.setItem(CONFIG.checkKey, 'true');
+            loadingScreen.classList.add('fade-out');
+            iframe.classList.add('visible');
+            
+            setTimeout(() => {
+                loadingScreen.style.display = 'none';
+            }, 300);
+        }
+
+        async function initialize() {
+            try {
+                console.log('=== MECCA Niagara Portal Wrapper ===');
+                console.log('Portal:', CONFIG.portalUrl);
+
+                // Check if returning from manual login
+                if (document.referrer.includes('mecca.ath.cx') || 
+                    sessionStorage.getItem('manual_login_attempt') === 'true') {
+                    console.log('✓ Returning from portal/manual login');
+                    sessionStorage.setItem(CONFIG.checkKey, 'true');
+                    sessionStorage.removeItem('manual_login_attempt');
+                }
+
+                // Check if already authenticated this session
+                const alreadyChecked = sessionStorage.getItem(CONFIG.checkKey) === 'true';
+
+                if (alreadyChecked) {
+                    console.log('✓ Already authenticated this session');
+                    updateLoadingText('Loading portal...', 'Welcome back');
+                    
+                    try {
+                        await loadPortal();
+                        showPortal();
+                        return;
+                    } catch (error) {
+                        console.log('→ Session may have expired, re-authenticating...');
+                        sessionStorage.removeItem(CONFIG.checkKey);
+                        // Fall through to authentication below
+                    }
+                }
+
+                // First time - attempt auto-login with popup
+                console.log('→ First visit - opening login popup');
+                updateLoadingText('Opening login window...', 'First-time setup');
+                
                 try {
-                    await authManager.login();
-                    document.getElementById('portal-frame').src = CONFIG.portalUrl;
-                } catch (error) {
-                    console.error('✗ Token refresh failed:', error);
+                    await attemptAutoLogin();
+                    console.log('✓ Login window closed');
+                    
+                    updateLoadingText('Verifying authentication...', 'Loading portal');
+                    
+                    // Wait a moment for session to propagate
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    // Now try to load the portal
+                    await loadPortal();
+                    showPortal();
+
+                } catch (loginError) {
+                    console.error('✗ Login process failed:', loginError);
+                    
+                    // If popup was blocked or user closed it quickly, show manual option
+                    if (loginError.message.includes('blocked') || loginError.message.includes('timeout')) {
+                        showError(
+                            'Please log in to the Niagara portal using the button below. ' +
+                            'After logging in, close the login window and this page will automatically load the portal.'
+                        );
+                        
+                        // Keep checking if user logs in manually
+                        const recheckInterval = setInterval(async () => {
+                            console.log('→ Checking if manual login completed...');
+                            try {
+                                await loadPortal();
+                                clearInterval(recheckInterval);
+                                showPortal();
+                            } catch (e) {
+                                // Still not authenticated, keep checking
+                            }
+                        }, 3000);
+                        
+                    } else {
+                        // Other error
+                        showError(
+                            'Unable to connect to the portal. Please try logging in manually using the button below.'
+                        );
+                    }
+                }
+
+            } catch (error) {
+                console.error('=== Initialization Error ===');
+                console.error(error);
+                showError(
+                    error.message || 'Failed to load portal. Please try logging in manually.'
+                );
+            }
+        }
+
+        // Auto-refresh every 30 minutes to keep session alive
+        setInterval(() => {
+            console.log('→ Auto-refresh to maintain session');
+            const iframe = document.getElementById('portal-frame');
+            if (iframe && iframe.src !== 'about:blank' && iframe.classList.contains('visible')) {
+                iframe.src = iframe.src;
+            }
+        }, 30 * 60 * 1000);
+
+        // Reload when page becomes visible (in case session expired)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                const iframe = document.getElementById('portal-frame');
+                if (iframe && iframe.classList.contains('visible')) {
+                    console.log('→ Page visible, checking session...');
+                    iframe.src = iframe.src;
                 }
             }
         });

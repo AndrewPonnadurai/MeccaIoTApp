@@ -6,26 +6,26 @@
     },
     {
       "route": "/*",
-      "serve": "/index-proxy.html",
+      "serve": "/index.html",
       "statusCode": 200
     }
   ],
   "navigationFallback": {
-    "rewrite": "/index-proxy.html",
+    "rewrite": "/index.html",
     "exclude": ["/images/*.{png,jpg,gif}", "/css/*", "/api/*"]
   },
   "responseOverrides": {
     "401": {
-      "redirect": "/index-proxy.html",
+      "redirect": "/index.html",
       "statusCode": 302
     }
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
-    "Content-Security-Policy": "default-src 'self' https://api-mecca.platinumfm.com.au https://report-mecca.platinumfm.com.au https://maps.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; connect-src 'self' https://api-mecca.platinumfm.com.au https://report-mecca.platinumfm.com.au; frame-src 'self' https://report-mecca.platinumfm.com.au;"
+    "Content-Security-Policy": "default-src 'self' https://mecca.ath.cx; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://mecca.ath.cx; frame-src 'self' https://mecca.ath.cx;"
   },
   "platform": {
     "apiRuntime": "node:18"
   }
-}# Config updated
+}
